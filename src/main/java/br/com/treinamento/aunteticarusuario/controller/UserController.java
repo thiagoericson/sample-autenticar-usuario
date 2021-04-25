@@ -1,51 +1,59 @@
 package br.com.treinamento.aunteticarusuario.controller;
 
-import java.util.Date;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import br.com.treinamento.aunteticarusuario.dto.User;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import br.com.treinamento.aunteticarusuario.model.JwtRequest;
+import br.com.treinamento.aunteticarusuario.model.JwtResponse;
+import br.com.treinamento.aunteticarusuario.service.UserService;
+import br.com.treinamento.aunteticarusuario.utils.JWTUtility;
 
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 public class UserController {
 
-	@PostMapping("user")
-	public User login(@RequestParam("user") String username, @RequestParam("password") String pwd) {
-		
-		String token = getJWTToken(username);
-		User user = new User();
-		user.setUser(username);
-		user.setToken(token);		
-		return user;
-		
-	}
+    @Autowired
+    private JWTUtility jwtUtility;
 
-	private String getJWTToken(String username) {
-		String secretKey = "mySecretKey";
-		List<GrantedAuthority> grantedAuthorities = AuthorityUtils
-				.commaSeparatedStringToAuthorityList("ROLE_USER");
-		
-		String token = Jwts
-				.builder()
-				.setId("softtekJWT")
-				.setSubject(username)
-				.claim("authorities",
-						grantedAuthorities.stream()
-								.map(GrantedAuthority::getAuthority)
-								.collect(Collectors.toList()))
-				.setIssuedAt(new Date(System.currentTimeMillis()))
-				.setExpiration(new Date(System.currentTimeMillis() + 600000))
-				.signWith(SignatureAlgorithm.HS512,
-						secretKey.getBytes()).compact();
+    @Autowired
+    private AuthenticationManager authenticationManager;
 
-		return "Bearer " + token;
-	}
+    @Autowired
+    private UserService userService;
+
+    @GetMapping("/hello")
+    public String hello() {
+        return "Hello folks!";
+    }
+
+    @PostMapping("/authenticate")
+    public JwtResponse authenticate(@RequestBody JwtRequest jwtRequest) throws Exception{
+
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            jwtRequest.getUsername(),
+                            jwtRequest.getPassword()
+                    )
+            );
+        } catch (BadCredentialsException e) {
+            throw new Exception("INVALID_CREDENTIALS", e);
+        }
+
+        final UserDetails userDetails
+                = userService.loadUserByUsername(jwtRequest.getUsername());
+
+        final String token =
+                jwtUtility.generateToken(userDetails);
+
+        return new JwtResponse(token);
+    }
 }
